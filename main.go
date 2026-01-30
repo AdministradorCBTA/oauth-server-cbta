@@ -1,33 +1,20 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"net/http"
-
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/github"
+	"os"
 )
-
-var (
-	githubOauthConfig *oauth2.Config
-)
-
-func init() {
-	githubOauthConfig = &oauth2.Config{
-		ClientID:     os.Getenv("OAUTH_CLIENT_ID"),
-		ClientSecret: os.Getenv("OAUTH_CLIENT_SECRET"),
-		Endpoint:     github.Endpoint,
-	}
-}
 
 func main() {
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/auth", authHandler)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OAuth Server is Running (Standard Lib)!"))
+	})
+
 	http.HandleFunc("/callback", callbackHandler)
-	
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
@@ -36,24 +23,48 @@ func main() {
 	http.ListenAndServe(":"+port, nil)
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("OAuth Server is Running!"))
-}
-
-func authHandler(w http.ResponseWriter, r *http.Request) {
-	url := githubOauthConfig.AuthCodeURL("state", oauth2.AccessTypeOnline)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-}
-
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
-	code := r.FormValue("code")
-	token, err := githubOauthConfig.Exchange(context.Background(), code)
-	if err != nil {
-		http.Error(w, "Error exchanging code for token", http.StatusInternalServerError)
+	// 1. Obtener el código que nos manda GitHub
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "No code found", http.StatusBadRequest)
 		return
 	}
 
-	// Respuesta para Decap CMS
+	// 2. Preparar los datos para canjear el código por el token
+	clientID := os.Getenv("OAUTH_CLIENT_ID")
+	clientSecret := os.Getenv("OAUTH_CLIENT_SECRET")
+
+	requestBody, _ := json.Marshal(map[string]string{
+		"client_id":     clientID,
+		"client_secret": clientSecret,
+		"code":          code,
+	})
+
+	// 3. Hacer la petición a GitHub manualmente
+	req, _ := http.NewRequest("POST", "https://github.com/login/oauth/access_token", bytes.NewBuffer(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to connect to GitHub", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	// 4. Leer la respuesta
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	token, ok := result["access_token"].(string)
+	if !ok {
+		http.Error(w, "GitHub did not return a token", http.StatusInternalServerError)
+		return
+	}
+
+	// 5. Enviar el script mágico a la ventana
 	content := fmt.Sprintf(`
 	<script>
 		const receiveMessage = (message) => {
@@ -64,14 +75,13 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 			window.close();
 		};
 		window.addEventListener("message", receiveMessage, false);
-		// Enviar mensaje inmediatamente por si acaso
 		window.opener.postMessage(
 			'authorization:github:success:{"token":"%s","provider":"github"}',
 			"*"
 		);
 		window.close();
 	</script>
-	`, token.AccessToken, token.AccessToken)
+	`, token, token)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(content))
