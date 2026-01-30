@@ -9,10 +9,15 @@ import (
 )
 
 func main() {
+	// Ruta de inicio (para ver si funciona)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OAuth Server is Running (Standard Lib)!"))
 	})
 
+	// Ruta de inicio de sesión (LA QUE FALTABA)
+	http.HandleFunc("/auth", authHandler)
+
+	// Ruta de regreso de GitHub
 	http.HandleFunc("/callback", callbackHandler)
 
 	port := os.Getenv("PORT")
@@ -23,15 +28,22 @@ func main() {
 	http.ListenAndServe(":"+port, nil)
 }
 
+// Esta función redirige al usuario a GitHub
+func authHandler(w http.ResponseWriter, r *http.Request) {
+	clientID := os.Getenv("OAUTH_CLIENT_ID")
+	// Redirigimos a GitHub pidiendo permiso para ver repositorios
+	redirectURL := fmt.Sprintf("https://github.com/login/oauth/authorize?client_id=%s&scope=repo", clientID)
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
+// Esta función recibe el código y lo canjea por el token
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. Obtener el código que nos manda GitHub
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "No code found", http.StatusBadRequest)
 		return
 	}
 
-	// 2. Preparar los datos para canjear el código por el token
 	clientID := os.Getenv("OAUTH_CLIENT_ID")
 	clientSecret := os.Getenv("OAUTH_CLIENT_SECRET")
 
@@ -41,7 +53,6 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		"code":          code,
 	})
 
-	// 3. Hacer la petición a GitHub manualmente
 	req, _ := http.NewRequest("POST", "https://github.com/login/oauth/access_token", bytes.NewBuffer(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -54,17 +65,16 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// 4. Leer la respuesta
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 
 	token, ok := result["access_token"].(string)
 	if !ok {
-		http.Error(w, "GitHub did not return a token", http.StatusInternalServerError)
+		// A veces GitHub manda el error en el body
+		http.Error(w, "GitHub did not return a token. Check Client ID/Secret.", http.StatusInternalServerError)
 		return
 	}
 
-	// 5. Enviar el script mágico a la ventana
 	content := fmt.Sprintf(`
 	<script>
 		const receiveMessage = (message) => {
