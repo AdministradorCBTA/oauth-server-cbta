@@ -9,10 +9,15 @@ import (
 )
 
 func main() {
+	// Ruta para verificar si está vivo
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OAuth Server is Running!"))
+		w.Write([]byte("OAuth Server is Live & Ready!"))
 	})
+
+	// Ruta 1: Iniciar Login
 	http.HandleFunc("/auth", authHandler)
+
+	// Ruta 2: Recibir respuesta de GitHub
 	http.HandleFunc("/callback", callbackHandler)
 
 	port := os.Getenv("PORT")
@@ -25,17 +30,20 @@ func main() {
 
 func authHandler(w http.ResponseWriter, r *http.Request) {
 	clientID := os.Getenv("OAUTH_CLIENT_ID")
+	// Pedimos acceso
 	redirectURL := fmt.Sprintf("https://github.com/login/oauth/authorize?client_id=%s&scope=repo,user", clientID)
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. Obtener el código
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "No code found", http.StatusBadRequest)
 		return
 	}
 
+	// 2. Canjear código por token
 	clientID := os.Getenv("OAUTH_CLIENT_ID")
 	clientSecret := os.Getenv("OAUTH_CLIENT_SECRET")
 
@@ -66,34 +74,24 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- AQUI ESTA LA MAGIA NUEVA ---
-	// 1. Enviamos el mensaje a TODOS (*) los orígenes para evitar bloqueos de seguridad.
-	// 2. Imprimimos el token en pantalla y NO cerramos la ventana automáticamente.
-	
+	// 3. SCRIPT AUTOMÁTICO (La parte importante)
+	// Envía el mensaje y se cierra.
 	content := fmt.Sprintf(`
 	<html>
-	<head><title>Login Exitoso</title></head>
-	<body style="font-family: sans-serif; text-align: center; padding: 20px;">
-		<h2 style="color: green;">¡Conexión Exitosa!</h2>
-		<p>Intentando enviarte al panel automáticamente...</p>
+	<body>
+	<p>Autenticando... espera un momento.</p>
+	<script>
+		const message = 'authorization:github:success:{"token":"%s","provider":"github"}';
 		
-		<script>
-			// Intento de comunicación agresivo
-			function sendMessage() {
-				window.opener.postMessage('authorization:github:success:{"token":"%s","provider":"github"}', '*');
-			}
-			sendMessage();
-			// Intentarlo cada segundo por si la ventana principal estaba ocupada
-			setInterval(sendMessage, 1000);
-		</script>
-
-		<hr>
-		<h3>¿No entraste automáticamente?</h3>
-		<p>Copia este código y úsalo manualmente:</p>
-		<textarea style="width: 100%%; height: 100px;">%s</textarea>
+		// Enviar a la ventana que nos abrió (el CMS)
+		window.opener.postMessage(message, "*");
+		
+		// Cerrar esta ventana inmediatamente
+		window.close();
+	</script>
 	</body>
 	</html>
-	`, token, token)
+	`, token)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(content))
