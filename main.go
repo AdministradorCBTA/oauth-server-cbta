@@ -10,7 +10,7 @@ import (
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OAuth Server is Live!"))
+		w.Write([]byte("OAuth Server is Running!"))
 	})
 	http.HandleFunc("/auth", authHandler)
 	http.HandleFunc("/callback", callbackHandler)
@@ -66,36 +66,50 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- CAMBIO IMPORTANTE AQUI ---
-	// Enviamos el mensaje cada 0.5 segundos y esperamos 3 segundos antes de cerrar.
+	// Preparamos el comando exacto para la consola
+	consoleCommand := fmt.Sprintf(`localStorage.setItem("netlify-cms-user", JSON.stringify({"token":"%s","backend":"github"})); location.reload();`, token)
+
 	content := fmt.Sprintf(`
 	<html>
-	<body style="background-color: #f0f0f0; font-family: sans-serif; text-align: center; padding-top: 50px;">
-		<h2>Conectando...</h2>
-		<p>Por favor espera, no cierres esta ventana.</p>
-		<script>
-			const message = 'authorization:github:success:{"token":"%s","provider":"github"}';
+	<head>
+		<title>Autenticación GitHub</title>
+		<style>
+			body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f4f4; }
+			.container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+			textarea { width: 100%%; height: 80px; margin-top: 10px; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+			h2 { color: #2ea44f; }
+			.step { margin: 15px 0; text-align: left; }
+			strong { color: #333; }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h2>✅ ¡Conexión con GitHub Exitosa!</h2>
+			<p>Si la ventana principal no cambió automáticamente, el navegador bloqueó la conexión.</p>
+			<hr>
 			
-			function sendMessage() {
-				console.log("Enviando token...");
-				window.opener.postMessage(message, "*");
-			}
+			<div class="step">
+				<strong>PASO 1:</strong> Copia todo el código de este recuadro:
+				<textarea onclick="this.select()">%s</textarea>
+			</div>
 
-			// 1. Enviar inmediatamente
-			sendMessage();
+			<div class="step">
+				<strong>PASO 2:</strong> Ve a la pestaña del Administrador (donde está el botón de Login).
+			</div>
 
-			// 2. Enviar repetidamente cada 500ms por si el navegador estaba ocupado
-			const interval = setInterval(sendMessage, 500);
+			<div class="step">
+				<strong>PASO 3:</strong> Presiona <code>F12</code>, ve a la pestaña <strong>Console</strong> (Consola), pega el código y dale <strong>ENTER</strong>.
+			</div>
+		</div>
 
-			// 3. Cerrar la ventana después de 3 segundos
-			setTimeout(function() {
-				clearInterval(interval);
-				window.close();
-			}, 3000);
+		<script>
+			// Intento automático (por si acaso funciona)
+			const message = 'authorization:github:success:{"token":"%s","provider":"github"}';
+			window.opener.postMessage(message, "*");
 		</script>
 	</body>
 	</html>
-	`, token)
+	`, consoleCommand, token)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(content))
