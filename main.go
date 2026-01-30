@@ -66,47 +66,39 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Preparamos el comando exacto para la consola
+	// Preparamos el comando exacto para copiar y pegar
 	consoleCommand := fmt.Sprintf(`localStorage.setItem("netlify-cms-user", JSON.stringify({"token":"%s","backend":"github"})); location.reload();`, token)
 
 	content := fmt.Sprintf(`
 	<html>
 	<head>
-		<title>Autenticación GitHub</title>
+		<title>Acceso Generado</title>
 		<style>
-			body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f4f4; }
-			.container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
-			textarea { width: 100%%; height: 80px; margin-top: 10px; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+			body { font-family: sans-serif; padding: 20px; text-align: center; background: #f0f2f5; }
+			.card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: 20px auto; }
+			textarea { width: 100%%; height: 100px; margin-top: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: monospace; font-size: 14px; color: #333; }
 			h2 { color: #2ea44f; }
-			.step { margin: 15px 0; text-align: left; }
-			strong { color: #333; }
+			.instrucciones { text-align: left; margin-top: 20px; font-size: 15px; line-height: 1.6; }
+			code { background: #eee; padding: 2px 5px; border-radius: 3px; }
 		</style>
 	</head>
 	<body>
-		<div class="container">
-			<h2>✅ ¡Conexión con GitHub Exitosa!</h2>
-			<p>Si la ventana principal no cambió automáticamente, el navegador bloqueó la conexión.</p>
-			<hr>
+		<div class="card">
+			<h2>✅ ¡Token Recibido con Éxito!</h2>
+			<p>Tu navegador bloqueó la conexión automática, pero ya tenemos tu llave.</p>
 			
-			<div class="step">
-				<strong>PASO 1:</strong> Copia todo el código de este recuadro:
+			<div class="instrucciones">
+				<strong>Paso 1:</strong> Copia TODO el código del siguiente cuadro:
 				<textarea onclick="this.select()">%s</textarea>
-			</div>
-
-			<div class="step">
-				<strong>PASO 2:</strong> Ve a la pestaña del Administrador (donde está el botón de Login).
-			</div>
-
-			<div class="step">
-				<strong>PASO 3:</strong> Presiona <code>F12</code>, ve a la pestaña <strong>Console</strong> (Consola), pega el código y dale <strong>ENTER</strong>.
+				
+				<br><br>
+				<strong>Paso 2:</strong> Vuelve a la pestaña del administrador (donde está el botón de Login).
+				<br>
+				<strong>Paso 3:</strong> Presiona <code>F12</code>, ve a la pestaña <strong>Console</strong> (Consola).
+				<br>
+				<strong>Paso 4:</strong> Pega el código y presiona <strong>ENTER</strong>.
 			</div>
 		</div>
-
-		<script>
-			// Intento automático (por si acaso funciona)
-			const message = 'authorization:github:success:{"token":"%s","provider":"github"}';
-			window.opener.postMessage(message, "*");
-		</script>
 	</body>
 	</html>
 	`, consoleCommand, token)
