@@ -9,15 +9,10 @@ import (
 )
 
 func main() {
-	// Ruta de inicio (para ver si funciona)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OAuth Server is Running (Standard Lib)!"))
+		w.Write([]byte("OAuth Server is Running!"))
 	})
-
-	// Ruta de inicio de sesión (LA QUE FALTABA)
 	http.HandleFunc("/auth", authHandler)
-
-	// Ruta de regreso de GitHub
 	http.HandleFunc("/callback", callbackHandler)
 
 	port := os.Getenv("PORT")
@@ -28,15 +23,12 @@ func main() {
 	http.ListenAndServe(":"+port, nil)
 }
 
-// Esta función redirige al usuario a GitHub
 func authHandler(w http.ResponseWriter, r *http.Request) {
 	clientID := os.Getenv("OAUTH_CLIENT_ID")
-	// Redirigimos a GitHub pidiendo permiso para ver repositorios
-	redirectURL := fmt.Sprintf("https://github.com/login/oauth/authorize?client_id=%s&scope=repo", clientID)
+	redirectURL := fmt.Sprintf("https://github.com/login/oauth/authorize?client_id=%s&scope=repo,user", clientID)
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
-// Esta función recibe el código y lo canjea por el token
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -70,27 +62,37 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	token, ok := result["access_token"].(string)
 	if !ok {
-		// A veces GitHub manda el error en el body
-		http.Error(w, "GitHub did not return a token. Check Client ID/Secret.", http.StatusInternalServerError)
+		http.Error(w, "GitHub did not return a token", http.StatusInternalServerError)
 		return
 	}
 
+	// --- AQUI ESTA LA MAGIA NUEVA ---
+	// 1. Enviamos el mensaje a TODOS (*) los orígenes para evitar bloqueos de seguridad.
+	// 2. Imprimimos el token en pantalla y NO cerramos la ventana automáticamente.
+	
 	content := fmt.Sprintf(`
-	<script>
-		const receiveMessage = (message) => {
-			window.opener.postMessage(
-				'authorization:github:success:{"token":"%s","provider":"github"}',
-				message.origin
-			);
-			window.close();
-		};
-		window.addEventListener("message", receiveMessage, false);
-		window.opener.postMessage(
-			'authorization:github:success:{"token":"%s","provider":"github"}',
-			"*"
-		);
-		window.close();
-	</script>
+	<html>
+	<head><title>Login Exitoso</title></head>
+	<body style="font-family: sans-serif; text-align: center; padding: 20px;">
+		<h2 style="color: green;">¡Conexión Exitosa!</h2>
+		<p>Intentando enviarte al panel automáticamente...</p>
+		
+		<script>
+			// Intento de comunicación agresivo
+			function sendMessage() {
+				window.opener.postMessage('authorization:github:success:{"token":"%s","provider":"github"}', '*');
+			}
+			sendMessage();
+			// Intentarlo cada segundo por si la ventana principal estaba ocupada
+			setInterval(sendMessage, 1000);
+		</script>
+
+		<hr>
+		<h3>¿No entraste automáticamente?</h3>
+		<p>Copia este código y úsalo manualmente:</p>
+		<textarea style="width: 100%%; height: 100px;">%s</textarea>
+	</body>
+	</html>
 	`, token, token)
 
 	w.Header().Set("Content-Type", "text/html")
